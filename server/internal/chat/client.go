@@ -1,71 +1,76 @@
 package chat
 
 import (
-	"log"
+	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-type Client struct {
+var mu sync.Mutex
+
+type client struct {
 	socket  *websocket.Conn
 	server  *Server
 	name    string
 	id      int
-	message chan Message
+	message chan message
 	done    chan bool
 }
 
 var id = 0
 
-func NewClient(conn *websocket.Conn, server *Server, name string) *Client {
+func newClient(conn *websocket.Conn, server *Server, name string) *client {
+	mu.Lock()
+	defer mu.Unlock()
 	id++
-	return &Client{
+	return &client{
 		socket:  conn,
 		server:  server,
 		name:    name,
 		id:      id,
-		message: make(chan Message),
+		message: make(chan message),
 		done:    make(chan bool),
 	}
 }
 
-func (c *Client) Conn() *websocket.Conn {
-	return c.socket
-}
-
-func (c *Client) Start() {
+func (c *client) start() {
 	go c.writeTo()
 	go c.readFrom()
 }
 
-func (c *Client) Write(msg Message) {
+func (c *client) close() {
+	c.done <- true
+}
+
+func (c *client) write(msg message) {
 	c.message <- msg
 }
 
-func (c *Client) writeTo() {
+func (c *client) writeTo() {
 	for {
 		select {
 		case msg := <-c.message:
-			if err := c.socket.WriteMessage(websocket.TextMessage, msg.ToByte()); err != nil {
-				log.Println("client write: ", err)
-				c.done <- true
+			if err := c.socket.WriteMessage(websocket.TextMessage, msg.toByte()); err != nil {
+				// log.Println("client write: ", err)
+				c.close()
 				return
 			}
 		case <-c.done:
-			c.server.done <- Message{ID: c.id}
+			c.server.close(c)
 			return
 		}
 	}
 }
 
-func (c *Client) readFrom() {
+func (c *client) readFrom() {
 	for {
-		_, msg, err := c.socket.ReadMessage()
+		_, m, err := c.socket.ReadMessage()
 		if err != nil {
-			log.Println("client read: ", err)
-			c.done <- true
+			// log.Println("client read: ", err)
+			c.close()
 			return
 		}
-		c.server.message <- Message{Sender: c.name, ID: c.id, Body: string(msg)}
+		msg := newMessage(c.name, string(m), c.id)
+		c.server.send(msg)
 	}
 }

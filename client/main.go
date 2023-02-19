@@ -50,7 +50,6 @@ func main() {
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("read: ", err)
 				break
 			}
 			log.Printf("%s", message)
