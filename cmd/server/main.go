@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"chat.server.com/internal/chat"
+	"github.com/jmirfield/support-chat-websockets/internal/chat"
 )
 
 func main() {
