@@ -2,7 +2,6 @@ package chat
 
 import (
 	"encoding/json"
-	"log"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -70,7 +69,7 @@ func (c *user) readFrom() {
 		var msg Message
 		err := c.socket.ReadJSON(&msg)
 		if err != nil {
-			log.Println("client read: ", err)
+			// log.Println("client read: ", err)
 			c.close()
 			return
 		}
