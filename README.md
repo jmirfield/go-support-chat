@@ -8,5 +8,14 @@ You will need to run at least 3 terminals to play around with this.
 
 To run the server:
 ```
-go run ./server .
+go run ./cmd/server
+```
+
+To run a client:
+```
+// for end user
+go run ./cmd/client
+
+// for support user
+go run ./cmd/client -s
 ```
