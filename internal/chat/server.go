@@ -140,7 +140,10 @@ func (s *Server) unregisterSupportUser(su *user) {
 		return
 	}
 	if user != nil {
-		user.socket.Close()
+		// Bad pattern? Not sure
+		s.mu.Unlock()
+		s.addToQueue(user)
+		s.mu.Lock()
 	}
 	delete(s.workers, su)
 }
