@@ -11,26 +11,26 @@ import (
 )
 
 var (
-	server *Server
-	hs     *httptest.Server
-	url    string
+	server  *Server
+	hs      *httptest.Server
+	testURL string
 )
 
 func setupTestCase(t *testing.T) func(t *testing.T) {
 	server = NewServer()
 	go server.Start()
 	hs = httptest.NewServer(http.HandlerFunc(server.Handler))
-	url = "ws" + strings.TrimPrefix(hs.URL, "http")
+	testURL = "ws" + strings.TrimPrefix(hs.URL, "http")
 	return func(t *testing.T) {
 		defer hs.Close()
 		server.Stop()
 		server = nil
-		url = ""
+		testURL = ""
 	}
 }
 
 func setupClient(t *testing.T) func() {
-	ws, _, err := websocket.DefaultDialer.Dial(url, nil)
+	ws, _, err := websocket.DefaultDialer.Dial(testURL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func setupClient(t *testing.T) func() {
 func setupSupportClient(t *testing.T) func() {
 	header := http.Header{}
 	header.Set("type", "S")
-	ws, _, err := websocket.DefaultDialer.Dial(url, header)
+	ws, _, err := websocket.DefaultDialer.Dial(testURL, header)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestServerSupportClientAndClient(t *testing.T) {
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
-	supports := []*client{}
+	supports := []*user{}
 	for k, v := range server.workers {
 		supports = append(supports, k)
 		if v == nil {

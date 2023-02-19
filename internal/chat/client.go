@@ -1,76 +1,105 @@
 package chat
 
 import (
-	"sync"
+	"bufio"
+	"encoding/json"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gorilla/websocket"
 )
 
-var mu sync.Mutex
-
-type client struct {
-	socket  *websocket.Conn
-	server  *Server
-	name    string
-	id      int
-	message chan message
-	done    chan bool
+// Client used to connect to websocket server
+type Client struct {
+	socket *websocket.Conn
+	text   chan string
+	done   chan os.Signal
 }
 
-var id = 0
+// NewClient creates a new client with a connection to the websocket server
+func NewClient(name string, support bool, url url.URL) *Client {
+	headers := http.Header{}
+	headers.Set("Name", name)
+	if support {
+		headers.Set("Type", "S")
+	}
 
-func newClient(conn *websocket.Conn, server *Server, name string) *client {
-	mu.Lock()
-	defer mu.Unlock()
-	id++
-	return &client{
-		socket:  conn,
-		server:  server,
-		name:    name,
-		id:      id,
-		message: make(chan message),
-		done:    make(chan bool),
+	conn, _, err := websocket.DefaultDialer.Dial(url.String(), headers)
+	if err != nil {
+		log.Fatal("error connecting to server: ", err)
+	}
+
+	interupt := make(chan os.Signal, 1)
+	signal.Notify(interupt, os.Interrupt, syscall.SIGINT)
+
+	return &Client{
+		socket: conn,
+		text:   make(chan string),
+		done:   interupt,
 	}
 }
 
-func (c *client) start() {
-	go c.writeTo()
-	go c.readFrom()
-}
+// Start starts client communication with server
+func (c *Client) Start() {
+	defer c.Close()
+	go c.read()
+	go c.write()
 
-func (c *client) close() {
-	c.done <- true
-}
-
-func (c *client) write(msg message) {
-	c.message <- msg
-}
-
-func (c *client) writeTo() {
 	for {
 		select {
-		case msg := <-c.message:
-			if err := c.socket.WriteMessage(websocket.TextMessage, msg.toByte()); err != nil {
-				// log.Println("client write: ", err)
-				c.close()
-				return
-			}
 		case <-c.done:
-			c.server.close(c)
 			return
+		case text := <-c.text:
+			c.send(text)
 		}
+
 	}
 }
 
-func (c *client) readFrom() {
+// Close closes client socket connection
+func (c *Client) Close() {
+	c.socket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	c.socket.Close()
+}
+
+func (c *Client) Stop() {
+	c.done <- syscall.SIGINT
+}
+
+func (c *Client) read() {
 	for {
-		_, m, err := c.socket.ReadMessage()
+		var msg Message
+		err := c.socket.ReadJSON(&msg)
 		if err != nil {
-			// log.Println("client read: ", err)
-			c.close()
+			// log.Println("read: ", err)
+			c.Stop()
 			return
 		}
-		msg := newMessage(c.name, string(m), c.id)
-		c.server.send(msg)
+		log.Print(msg.String())
+	}
+}
+
+func (c *Client) write() {
+	for {
+		var text string
+		scanner := bufio.NewScanner(os.Stdin)
+		if scanner.Scan() {
+			text = scanner.Text()
+		}
+		c.text <- text
+	}
+}
+
+func (c *Client) send(text string) {
+	msg := Message{Body: text}
+	json, _ := json.Marshal(msg)
+	if err := c.socket.WriteMessage(websocket.TextMessage, json); err != nil {
+		// log.Println("write: ", err)
+		c.Stop()
+		return
 	}
 }

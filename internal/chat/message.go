@@ -2,20 +2,20 @@ package chat
 
 import "fmt"
 
-type message struct {
-	sender string
-	body   string
-	id     int
+type Message struct {
+	Sender string `json:"sender,omitempty"`
+	Body   string `json:"body"`
+	ID     int    `json:"id,string,omitempty"`
 }
 
-func newMessage(sender string, body string, id int) message {
-	return message{sender, body, id}
+func NewMessage(sender string, body string, id int) Message {
+	return Message{Sender: sender, Body: body, ID: id}
 }
 
-func (m message) String() string {
-	return fmt.Sprintf("%s: %s", m.sender, m.body)
+func (m Message) String() string {
+	return fmt.Sprintf("%s: %s", m.Sender, m.Body)
 }
 
-func (m message) toByte() []byte {
+func (m Message) toByte() []byte {
 	return []byte(m.String())
 }

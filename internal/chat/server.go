@@ -18,10 +18,10 @@ const (
 
 // Server represents the struct for the entire chat application
 type Server struct {
-	workers map[*client]*client
-	queue   []*client
-	message chan message
-	done    chan *client
+	workers map[*user]*user
+	queue   []*user
+	message chan Message
+	done    chan *user
 	poll    chan bool
 	stop    chan bool
 	mu      sync.Mutex
@@ -30,10 +30,10 @@ type Server struct {
 // NewServer creates manages the creation of a Server struct
 func NewServer() *Server {
 	return &Server{
-		workers: make(map[*client]*client),
-		queue:   []*client{},
-		message: make(chan message, 100),
-		done:    make(chan *client, 5),
+		workers: make(map[*user]*user),
+		queue:   []*user{},
+		message: make(chan Message, 100),
+		done:    make(chan *user, 5),
 		poll:    make(chan bool, 100),
 		stop:    make(chan bool),
 	}
@@ -45,10 +45,10 @@ func (s *Server) Start() {
 		select {
 		case msg := <-s.message:
 			s.write(msg)
-		case client := <-s.done:
-			s.unregisterClientHandler(client)
+		case user := <-s.done:
+			s.unregisterUserHandler(user)
 		case <-s.poll:
-			s.registerNextClient()
+			s.registerNextUser()
 		case <-s.stop:
 			return
 		}
@@ -68,95 +68,95 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	c := newClient(conn, s, r.Header.Get("Name"))
+	u := newUser(conn, s, r.Header.Get("Name"))
 	if r.Header.Get("Type") == "S" {
-		s.registerSupportClient(c)
+		s.registerSupportUser(u)
 	} else {
-		s.addToQueue(c)
+		s.addToQueue(u)
 	}
-	c.start()
+	u.start()
 }
 
-func (s *Server) send(msg message) {
+func (s *Server) send(msg Message) {
 	s.message <- msg
 }
 
-func (s *Server) write(msg message) {
+func (s *Server) write(msg Message) {
 	for k, v := range s.workers {
-		if k.id == msg.id && v != nil {
+		if k.id == msg.ID && v != nil {
 			v.write(msg)
 			return
 		}
-		if v != nil && v.id == msg.id {
+		if v != nil && v.id == msg.ID {
 			k.write(msg)
 			return
 		}
 	}
 }
 
-func (s *Server) unregisterClientHandler(c *client) {
+func (s *Server) unregisterUserHandler(u *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for k, v := range s.workers {
-		if k.id == c.id {
-			s.unregisterSupportClient(k)
+		if k.id == u.id {
+			s.unregisterSupportUser(k)
 			break
 		}
-		if v != nil && v.id == c.id {
-			s.unregisterClient(v)
+		if v != nil && v.id == u.id {
+			s.unregisterUser(v)
 			break
 		}
 	}
 	for _, v := range s.queue {
-		if v.id == c.id {
-			s.unregisterClient(v)
+		if v.id == u.id {
+			s.unregisterUser(v)
 			break
 		}
 	}
 }
 
-func (s *Server) close(c *client) {
-	s.done <- c
+func (s *Server) close(u *user) {
+	s.done <- u
 }
 
-func (s *Server) addToQueue(c *client) {
+func (s *Server) addToQueue(u *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queue = append(s.queue, c)
+	s.queue = append(s.queue, u)
 	s.poll <- true
 }
 
-func (s *Server) registerSupportClient(sc *client) {
+func (s *Server) registerSupportUser(su *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.workers[sc] = nil
+	s.workers[su] = nil
 	s.poll <- true
 }
 
-func (s *Server) unregisterSupportClient(sc *client) {
-	defer sc.socket.Close()
-	client, ok := s.workers[sc]
+func (s *Server) unregisterSupportUser(su *user) {
+	defer su.socket.Close()
+	user, ok := s.workers[su]
 	if !ok {
 		return
 	}
-	if client != nil {
-		client.socket.Close()
+	if user != nil {
+		user.socket.Close()
 	}
-	delete(s.workers, sc)
+	delete(s.workers, su)
 }
 
-func (s *Server) registerNextClient() {
+func (s *Server) registerNextUser() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.queue) == 0 {
 		return
 	}
 
-	c := s.queue[0]
+	u := s.queue[0]
 	for k, v := range s.workers {
 		if v == nil {
-			s.workers[k] = c
-			msg := newMessage(serverName, fmt.Sprintf("%s has joined the chat!", c.name), serverID)
+			s.workers[k] = u
+			msg := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", u.name), serverID)
 			k.write(msg)
 			s.queue = s.queue[1:]
 			return
@@ -164,20 +164,20 @@ func (s *Server) registerNextClient() {
 	}
 }
 
-func (s *Server) unregisterClient(c *client) {
-	defer c.socket.Close()
-	// If client disconnects while still in queue
+func (s *Server) unregisterUser(u *user) {
+	defer u.socket.Close()
+	// If user disconnects while still in queue
 	for i, v := range s.queue {
-		if v == c {
+		if v == u {
 			s.queue = append(s.queue[:i], s.queue[i+1:]...)
 			return
 		}
 	}
-	// If client disconnects while chatting with support client
+	// If user disconnects while chatting with support user
 	for k, v := range s.workers {
-		if v == c {
+		if v == u {
 			s.workers[k] = nil
-			msg := newMessage(serverName, fmt.Sprintf("%s has left the chat!", v.name), serverID)
+			msg := NewMessage(serverName, fmt.Sprintf("%s has left the chat!", v.name), serverID)
 			k.write(msg)
 			s.poll <- true
 			return
