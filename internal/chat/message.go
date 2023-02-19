@@ -17,7 +17,3 @@ func NewMessage(sender string, body string, id int) Message {
 func (m Message) String() string {
 	return fmt.Sprintf("%s: %s", m.Sender, m.Body)
 }
-
-func (m Message) toByte() []byte {
-	return []byte(m.String())
-}
