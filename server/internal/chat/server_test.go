@@ -61,6 +61,8 @@ func TestServerSingleClient(t *testing.T) {
 	defer teardownClient()
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	want := 1
 	if len(server.queue) != 1 {
@@ -78,6 +80,8 @@ func TestServerMultipleClients(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	want := 10
 	if len(server.queue) != want {
@@ -93,6 +97,8 @@ func TestServerSingleSupportClients(t *testing.T) {
 	defer teardownSupportClient()
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	want := 1
 	if len(server.workers) != want {
@@ -110,6 +116,8 @@ func TestServerMultipleSupportClients(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	want := 10
 	if len(server.workers) != want {
@@ -127,6 +135,8 @@ func TestServerSupportClientAndClient(t *testing.T) {
 	defer teardownClient()
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	supports := []*client{}
 	for k, v := range server.workers {
@@ -152,11 +162,13 @@ func TestServerMultipleSupportClientsAndClients(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
 
 	want := 5
 	if len(server.queue) != want {
 		t.Errorf("got %d; want %d", len(server.queue), want)
 	}
+	server.mu.Unlock()
 
 	for i := 0; i < 5; i++ {
 		teardownSupportClient := setupSupportClient(t)
@@ -164,6 +176,8 @@ func TestServerMultipleSupportClientsAndClients(t *testing.T) {
 	}
 
 	time.Sleep(50 * time.Millisecond)
+	server.mu.Lock()
+	defer server.mu.Unlock()
 
 	want = 0
 	if len(server.queue) != want {
