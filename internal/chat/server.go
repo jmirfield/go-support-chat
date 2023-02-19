@@ -83,10 +83,12 @@ func (s *Server) send(msg Message) {
 
 func (s *Server) write(msg Message) {
 	for k, v := range s.workers {
+		// If support user sent the message, forward that to end user
 		if k.id == msg.ID && v != nil {
 			v.write(msg)
 			return
 		}
+		// If end user send the message, forward that to support user
 		if v != nil && v.id == msg.ID {
 			k.write(msg)
 			return
@@ -94,6 +96,7 @@ func (s *Server) write(msg Message) {
 	}
 }
 
+// Looks for the user, either in the workers map or in the queue
 func (s *Server) unregisterUserHandler(u *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
