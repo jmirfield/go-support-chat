@@ -122,6 +122,8 @@ func (s *Server) close(u *user) {
 func (s *Server) addToQueue(u *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	msg := NewMessage(serverName, fmt.Sprint("Waiting for support user to join chat..."), serverID)
+	u.write(msg)
 	s.queue = append(s.queue, u)
 	s.poll <- true
 }
@@ -140,6 +142,8 @@ func (s *Server) unregisterSupportUser(su *user) {
 		return
 	}
 	if user != nil {
+		msg := NewMessage(serverName, fmt.Sprintf("%s has lost connection...", su.name), serverID)
+		user.write(msg)
 		// Bad pattern? Not sure
 		s.mu.Unlock()
 		s.addToQueue(user)
@@ -159,8 +163,10 @@ func (s *Server) registerNextUser() {
 	for k, v := range s.workers {
 		if v == nil {
 			s.workers[k] = u
-			msg := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", u.name), serverID)
-			k.write(msg)
+			msg1 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", u.name), serverID)
+			k.write(msg1)
+			msg2 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", k.name), serverID)
+			u.write(msg2)
 			s.queue = s.queue[1:]
 			return
 		}

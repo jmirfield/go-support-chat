@@ -66,6 +66,7 @@ func (c *Client) Close() {
 	c.socket.Close()
 }
 
+// Stop stops client execution and will eventually close the client socket connection
 func (c *Client) Stop() {
 	c.done <- syscall.SIGINT
 }

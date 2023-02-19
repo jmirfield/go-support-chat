@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/signal"
 
 	"github.com/jmirfield/support-chat-websockets/internal/chat"
 )
@@ -24,9 +23,6 @@ func main() {
 			break
 		}
 	}
-
-	interupt := make(chan os.Signal, 1)
-	signal.Notify(interupt, os.Interrupt)
 
 	var client *chat.Client
 	url := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/connect"}
