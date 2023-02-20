@@ -6,7 +6,7 @@ My main goal was to create a live-chat support application where end users can b
 Looking for feedback!
 
 # Design
-Server in the internal/chat package does the bulk of the work. All messages get sent to the Server and flow to the appropriate client(s). Client in internal/chat package is used for both support and end user clients. If a support user registers, Server moves them into the workers map waiting for an end user to join. If an end user joins, they get sent to the user queue. The queue is polled on certain actions like if a support user registers, or if an end user disconnects.
+Server in the internal/chat package does the bulk of the work. All messages get sent to the Server and flow to the appropriate client(s). Client in internal/chat package is used for both support and end user clients. If a support user registers, Server moves them into the workers map waiting for an end user to join. If an end user joins, they get sent to the user queue. The queue is polled on certain actions like if a support user registers, or if an end user disconnects and if there is an available support user, the end user gets removed from the queue and connected.
 
 # Usage
 You will need to run at least 3 terminals to play around with this.
