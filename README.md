@@ -1,4 +1,4 @@
-# golang-support-chat
+# go-support-chat
 This application was for golang practice with websockets. 
 
 My main goal was to create a live-chat support application where end users can be paired up with support users for help. Support users will wait for end users to join and if there are no support users available, end users wait in a queue.
