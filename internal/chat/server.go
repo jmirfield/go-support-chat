@@ -34,7 +34,7 @@ func NewServer() *Server {
 		queue:   []*user{},
 		message: make(chan Message, 100),
 		done:    make(chan *user, 5),
-		poll:    make(chan bool, 100),
+		poll:    make(chan bool, 5),
 		stop:    make(chan bool),
 	}
 }

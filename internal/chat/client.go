@@ -37,7 +37,7 @@ func NewClient(name string, support bool, url url.URL) *Client {
 
 	return &Client{
 		socket: conn,
-		text:   make(chan string),
+		text:   make(chan string, 5),
 		done:   interupt,
 	}
 }
