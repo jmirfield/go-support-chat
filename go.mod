@@ -1,4 +1,4 @@
-module github.com/jmirfield/support-chat-websockets
+module github.com/jmirfield/go-support-chat
 
 go 1.19
 

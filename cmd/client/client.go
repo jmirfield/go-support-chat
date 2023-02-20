@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/jmirfield/support-chat-websockets/internal/chat"
+	"github.com/jmirfield/go-support-chat/internal/chat"
 )
 
 var supportFlag = flag.Bool("s", false, "true if support client")

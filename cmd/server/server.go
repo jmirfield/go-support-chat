@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/jmirfield/support-chat-websockets/internal/chat"
+	"github.com/jmirfield/go-support-chat/internal/chat"
 )
 
 func main() {
