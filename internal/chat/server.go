@@ -77,20 +77,16 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 	u.start()
 }
 
-func (s *Server) send(msg Message) {
-	s.message <- msg
-}
-
 func (s *Server) write(msg Message) {
 	for k, v := range s.workers {
 		// If support user sent the message, forward that to end user
 		if k.id == msg.ID && v != nil {
-			v.write(msg)
+			v.message <- msg
 			return
 		}
 		// If end user send the message, forward that to support user
 		if v != nil && v.id == msg.ID {
-			k.write(msg)
+			k.message <- msg
 			return
 		}
 	}
@@ -118,15 +114,11 @@ func (s *Server) unregisterUserHandler(u *user) {
 	}
 }
 
-func (s *Server) close(u *user) {
-	s.done <- u
-}
-
 func (s *Server) addToQueue(u *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msg := NewMessage(serverName, fmt.Sprint("Waiting for support user to join chat..."), serverID)
-	u.write(msg)
+	u.message <- msg
 	s.queue = append(s.queue, u)
 	s.poll <- true
 }
@@ -146,7 +138,7 @@ func (s *Server) unregisterSupportUser(su *user) {
 	}
 	if user != nil {
 		msg := NewMessage(serverName, fmt.Sprintf("%s has lost connection...", su.name), serverID)
-		user.write(msg)
+		user.message <- msg
 		// Bad pattern? Not sure
 		s.mu.Unlock()
 		s.addToQueue(user)
@@ -167,9 +159,9 @@ func (s *Server) registerNextUser() {
 		if v == nil {
 			s.workers[k] = u
 			msg1 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", u.name), serverID)
-			k.write(msg1)
+			k.message <- msg1
 			msg2 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", k.name), serverID)
-			u.write(msg2)
+			u.message <- msg2
 			s.queue = s.queue[1:]
 			return
 		}
@@ -190,7 +182,7 @@ func (s *Server) unregisterUser(u *user) {
 		if v == u {
 			s.workers[k] = nil
 			msg := NewMessage(serverName, fmt.Sprintf("%s has left the chat!", v.name), serverID)
-			k.write(msg)
+			k.message <- msg
 			s.poll <- true
 			return
 		}

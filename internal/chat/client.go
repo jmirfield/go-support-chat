@@ -2,7 +2,6 @@ package chat
 
 import (
 	"bufio"
-	"encoding/json"
 	"log"
 	"net/http"
 	"net/url"
@@ -80,7 +79,7 @@ func (c *Client) read() {
 			c.Stop()
 			return
 		}
-		log.Print(msg.String())
+		log.Print(msg)
 	}
 }
 
@@ -97,8 +96,7 @@ func (c *Client) write() {
 
 func (c *Client) send(text string) {
 	msg := Message{Body: text}
-	json, _ := json.Marshal(msg)
-	if err := c.socket.WriteMessage(websocket.TextMessage, json); err != nil {
+	if err := c.socket.WriteJSON(msg); err != nil {
 		// log.Println("write: ", err)
 		c.Stop()
 		return

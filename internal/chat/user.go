@@ -1,13 +1,10 @@
 package chat
 
 import (
-	"encoding/json"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
-
-var mu sync.Mutex
 
 type user struct {
 	socket  *websocket.Conn
@@ -18,7 +15,10 @@ type user struct {
 	done    chan bool
 }
 
-var id = 0
+var (
+	mu sync.Mutex
+	id = 0
+)
 
 func newUser(conn *websocket.Conn, server *Server, name string) *user {
 	mu.Lock()
@@ -39,26 +39,17 @@ func (c *user) start() {
 	go c.readFrom()
 }
 
-func (c *user) close() {
-	c.done <- true
-}
-
-func (c *user) write(msg Message) {
-	c.message <- msg
-}
-
 func (c *user) writeTo() {
 	for {
 		select {
 		case msg := <-c.message:
-			json, _ := json.Marshal(msg)
-			if err := c.socket.WriteMessage(websocket.TextMessage, json); err != nil {
+			if err := c.socket.WriteJSON(msg); err != nil {
 				// log.Println("client write: ", err)
-				c.close()
+				c.done <- true
 				return
 			}
 		case <-c.done:
-			c.server.close(c)
+			c.server.done <- c
 			return
 		}
 	}
@@ -70,10 +61,10 @@ func (c *user) readFrom() {
 		err := c.socket.ReadJSON(&msg)
 		if err != nil {
 			// log.Println("client read: ", err)
-			c.close()
+			c.done <- true
 			return
 		}
 		msg = NewMessage(c.name, string(msg.Body), c.id)
-		c.server.send(msg)
+		c.server.message <- msg
 	}
 }
