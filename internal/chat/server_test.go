@@ -29,7 +29,7 @@ func setupTestCase(t *testing.T) func(t *testing.T) {
 	}
 }
 
-func setupClient(t *testing.T) func() {
+func setupUser(t *testing.T) func() {
 	ws, _, err := websocket.DefaultDialer.Dial(testURL, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func setupClient(t *testing.T) func() {
 	}
 }
 
-func setupSupportClient(t *testing.T) func() {
+func setupSupportUser(t *testing.T) func() {
 	header := http.Header{}
 	header.Set("type", "S")
 	ws, _, err := websocket.DefaultDialer.Dial(testURL, header)
@@ -57,8 +57,8 @@ func TestServerSingleClient(t *testing.T) {
 	teardownTestCase := setupTestCase(t)
 	defer teardownTestCase(t)
 
-	teardownClient := setupClient(t)
-	defer teardownClient()
+	teardownUser := setupUser(t)
+	defer teardownUser()
 
 	time.Sleep(50 * time.Millisecond)
 	server.mu.Lock()
@@ -75,8 +75,8 @@ func TestServerMultipleClients(t *testing.T) {
 	defer teardownTestCase(t)
 
 	for i := 0; i < 10; i++ {
-		teardownClient := setupClient(t)
-		defer teardownClient()
+		teardownUser := setupUser(t)
+		defer teardownUser()
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -93,8 +93,8 @@ func TestServerSingleSupportClients(t *testing.T) {
 	teardownTestCase := setupTestCase(t)
 	defer teardownTestCase(t)
 
-	teardownSupportClient := setupSupportClient(t)
-	defer teardownSupportClient()
+	teardownSupportUser := setupSupportUser(t)
+	defer teardownSupportUser()
 
 	time.Sleep(50 * time.Millisecond)
 	server.mu.Lock()
@@ -106,13 +106,13 @@ func TestServerSingleSupportClients(t *testing.T) {
 	}
 }
 
-func TestServerMultipleSupportClients(t *testing.T) {
+func TestMultipleSupportClients(t *testing.T) {
 	teardownTestCase := setupTestCase(t)
 	defer teardownTestCase(t)
 
 	for i := 0; i < 10; i++ {
-		teardownSupportClient := setupSupportClient(t)
-		defer teardownSupportClient()
+		teardownSupportUser := setupSupportUser(t)
+		defer teardownSupportUser()
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -125,14 +125,14 @@ func TestServerMultipleSupportClients(t *testing.T) {
 	}
 }
 
-func TestServerSupportClientAndClient(t *testing.T) {
+func TestSupportClientAndClient(t *testing.T) {
 	teardownTestCase := setupTestCase(t)
 	defer teardownTestCase(t)
 
-	teardownSupportClient := setupSupportClient(t)
-	defer teardownSupportClient()
-	teardownClient := setupClient(t)
-	defer teardownClient()
+	teardownSupportUser := setupSupportUser(t)
+	defer teardownSupportUser()
+	teardownUser := setupUser(t)
+	defer teardownUser()
 
 	time.Sleep(50 * time.Millisecond)
 	server.mu.Lock()
@@ -152,13 +152,13 @@ func TestServerSupportClientAndClient(t *testing.T) {
 	}
 }
 
-func TestServerMultipleSupportClientsAndClients(t *testing.T) {
+func TestMultipleSupportClientsAndClients(t *testing.T) {
 	teardownTestCase := setupTestCase(t)
 	defer teardownTestCase(t)
 
 	for i := 0; i < 5; i++ {
-		teardownClient := setupClient(t)
-		defer teardownClient()
+		teardownUser := setupUser(t)
+		defer teardownUser()
 	}
 
 	time.Sleep(50 * time.Millisecond)
@@ -171,14 +171,49 @@ func TestServerMultipleSupportClientsAndClients(t *testing.T) {
 	server.mu.Unlock()
 
 	for i := 0; i < 5; i++ {
-		teardownSupportClient := setupSupportClient(t)
-		defer teardownSupportClient()
+		teardownSupportUser := setupSupportUser(t)
+		defer teardownSupportUser()
 	}
 
 	time.Sleep(50 * time.Millisecond)
 	server.mu.Lock()
 	defer server.mu.Unlock()
 
+	want = 0
+	if len(server.queue) != want {
+		t.Errorf("got %d; want %d", len(server.queue), want)
+	}
+}
+
+func TestConnectNextUserFromQueue(t *testing.T) {
+	teardownTestCase := setupTestCase(t)
+	defer teardownTestCase(t)
+
+	teardownSupportUser := setupSupportUser(t)
+	defer teardownSupportUser()
+
+	for i := 0; i < 2; i++ {
+		teardownUser := setupUser(t)
+		defer teardownUser()
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	server.mu.Lock()
+	want := 1
+	if len(server.queue) != want {
+		t.Errorf("got %d; want %d", len(server.queue), want)
+	}
+
+	for _, v := range server.workers {
+		server.done <- v
+	}
+	server.mu.Unlock()
+
+	time.Sleep(50 * time.Millisecond)
+
+	server.mu.Lock()
+	defer server.mu.Unlock()
 	want = 0
 	if len(server.queue) != want {
 		t.Errorf("got %d; want %d", len(server.queue), want)
