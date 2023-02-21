@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/gorilla/websocket"
 )
@@ -32,42 +30,32 @@ func NewClient(url url.URL, name string, support bool) *Client {
 		log.Fatal("error connecting to server: ", err)
 	}
 
-	interupt := make(chan os.Signal, 1)
-	signal.Notify(interupt, os.Interrupt, syscall.SIGINT)
-
 	return &Client{
 		socket: conn,
-		text:   make(chan string, 5),
-		done:   interupt,
+		text:   make(chan string),
 	}
 }
 
 // Start starts client communication with server
 func (c *Client) Start() {
-	defer c.Close()
+	defer c.close()
 	go c.read()
-	go c.write()
 
+	var scanner = bufio.NewScanner(os.Stdin)
+	var text string
 	for {
-		select {
-		case <-c.done:
-			return
-		case text := <-c.text:
-			c.send(text)
+		if scanner.Scan() {
+			text = scanner.Text()
+			c.write(text)
 		}
-
 	}
 }
 
 // Close closes client socket connection
-func (c *Client) Close() {
+func (c *Client) close() {
 	c.socket.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	c.socket.Close()
-}
-
-// Stop stops client execution and will eventually close the client socket connection
-func (c *Client) Stop() {
-	c.done <- syscall.SIGINT
+	os.Exit(-1)
 }
 
 func (c *Client) read() {
@@ -76,29 +64,18 @@ func (c *Client) read() {
 		err := c.socket.ReadJSON(&msg)
 		if err != nil {
 			// log.Println("read: ", err)
-			c.Stop()
+			c.close()
 			return
 		}
 		log.Print(msg)
 	}
 }
 
-func (c *Client) write() {
-	for {
-		var text string
-		scanner := bufio.NewScanner(os.Stdin)
-		if scanner.Scan() {
-			text = scanner.Text()
-		}
-		c.text <- text
-	}
-}
-
-func (c *Client) send(text string) {
+func (c *Client) write(text string) {
 	msg := Message{Body: text}
 	if err := c.socket.WriteJSON(msg); err != nil {
 		// log.Println("write: ", err)
-		c.Stop()
+		c.close()
 		return
 	}
 }
