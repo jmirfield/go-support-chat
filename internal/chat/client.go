@@ -13,8 +13,6 @@ import (
 // Client used to connect to websocket server
 type Client struct {
 	socket *websocket.Conn
-	text   chan string
-	done   chan os.Signal
 }
 
 // NewClient creates a new client with a connection to the websocket server
@@ -32,7 +30,6 @@ func NewClient(url url.URL, name string, support bool) *Client {
 
 	return &Client{
 		socket: conn,
-		text:   make(chan string),
 	}
 }
 
