@@ -6,36 +6,39 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
-var upgrader = &websocket.Upgrader{}
+var (
+	upgrader   = &websocket.Upgrader{}
+	serverUUID = uuid.New()
+)
 
 const (
 	serverName = "Server"
-	serverID   = -1
 )
 
 // Server represents the struct for the entire chat application
 type Server struct {
-	workers map[*user]*user
-	queue   []*user
-	message chan Message
-	done    chan *user
-	poll    chan bool
-	stop    chan bool
-	mu      sync.Mutex
+	workers  map[*user]*user
+	queue    []*user
+	messages chan Message
+	close    chan uuid.UUID
+	poll     chan bool
+	stop     chan bool
+	mu       sync.Mutex
 }
 
 // NewServer creates manages the creation of a Server struct
 func NewServer() *Server {
 	return &Server{
-		workers: make(map[*user]*user),
-		queue:   []*user{},
-		message: make(chan Message, 100),
-		done:    make(chan *user, 5),
-		poll:    make(chan bool, 5),
-		stop:    make(chan bool),
+		workers:  make(map[*user]*user),
+		queue:    []*user{},
+		messages: make(chan Message, 5),
+		close:    make(chan uuid.UUID, 5),
+		poll:     make(chan bool, 5),
+		stop:     make(chan bool),
 	}
 }
 
@@ -43,12 +46,12 @@ func NewServer() *Server {
 func (s *Server) Start() {
 	for {
 		select {
-		case msg := <-s.message:
-			s.write(msg)
-		case user := <-s.done:
-			s.unregisterUserHandler(user)
+		case msg := <-s.messages:
+			go s.write(msg)
+		case id := <-s.close:
+			go s.unregisterUserHandler(id)
 		case <-s.poll:
-			s.registerNextUser()
+			go s.registerNextUser()
 		case <-s.stop:
 			return
 		}
@@ -68,83 +71,101 @@ func (s *Server) Handler(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	u := newUser(conn, s, r.Header.Get("Name"))
+
+	name := r.Header.Get("Name")
 	if r.Header.Get("Type") == "S" {
-		s.registerSupportUser(u)
+		s.newUser(conn, name, true)
 	} else {
-		s.addToQueue(u)
+		s.newUser(conn, name, false)
 	}
-	u.start()
+}
+
+func (s *Server) newUser(conn *websocket.Conn, name string, support bool) {
+	usr := &user{
+		id:      uuid.New(),
+		socket:  conn,
+		name:    name,
+		message: s.messages,
+		close:   s.close,
+	}
+
+	if support {
+		s.registerSupportUser(usr)
+	} else {
+		s.addToUserQueue(usr)
+	}
+
+	go usr.read()
 }
 
 func (s *Server) write(msg Message) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for k, v := range s.workers {
 		// If support user sent the message, forward that to end user
 		if k.id == msg.ID && v != nil {
-			v.message <- msg
+			go v.write(msg)
 			return
 		}
 		// If end user send the message, forward that to support user
 		if v != nil && v.id == msg.ID {
-			k.message <- msg
+			go k.write(msg)
 			return
 		}
 	}
 }
 
 // Looks for the user, either in the workers map or in the queue
-func (s *Server) unregisterUserHandler(u *user) {
+func (s *Server) unregisterUserHandler(id uuid.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for k, v := range s.workers {
-		if k.id == u.id {
-			s.unregisterSupportUser(k)
+	for su, u := range s.workers {
+		if su.id == id {
+			s.unregisterSupportUser(su)
 			break
 		}
-		if v != nil && v.id == u.id {
-			s.unregisterUser(v)
-			break
-		}
-	}
-	for _, v := range s.queue {
-		if v.id == u.id {
-			s.unregisterUser(v)
+		if u != nil && u.id == id {
+			s.unregisterUser(u)
 			break
 		}
 	}
+	for _, u := range s.queue {
+		if u.id == id {
+			s.unregisterUser(u)
+			break
+		}
+	}
 }
 
-func (s *Server) addToQueue(u *user) {
+func (s *Server) addToUserQueue(usr *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	msg := NewMessage(serverName, fmt.Sprint("Waiting for support user to join chat..."), serverID)
-	u.message <- msg
-	s.queue = append(s.queue, u)
+	usr.write(NewMessage(serverName, fmt.Sprint("Waiting for support user to join chat..."), serverUUID))
+	s.queue = append(s.queue, usr)
 	s.poll <- true
 }
 
-func (s *Server) registerSupportUser(su *user) {
+func (s *Server) registerSupportUser(usr *user) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.workers[su] = nil
+	s.workers[usr] = nil
 	s.poll <- true
 }
 
-func (s *Server) unregisterSupportUser(su *user) {
-	defer su.socket.Close()
-	user, ok := s.workers[su]
+func (s *Server) unregisterSupportUser(usr *user) {
+	defer usr.socket.Close()
+	u, ok := s.workers[usr]
 	if !ok {
 		return
 	}
-	if user != nil {
-		msg := NewMessage(serverName, fmt.Sprintf("%s has lost connection...", su.name), serverID)
-		user.message <- msg
+	if u != nil {
+		u.write(NewMessage(serverName, fmt.Sprintf("%s has lost connection...", usr.name), serverUUID))
 		// Bad pattern? Not sure
 		s.mu.Unlock()
-		s.addToQueue(user)
+		s.addToUserQueue(u)
 		s.mu.Lock()
 	}
-	delete(s.workers, su)
+	delete(s.workers, usr)
 }
 
 func (s *Server) registerNextUser() {
@@ -154,35 +175,32 @@ func (s *Server) registerNextUser() {
 		return
 	}
 
-	u := s.queue[0]
-	for k, v := range s.workers {
-		if v == nil {
-			s.workers[k] = u
-			msg1 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", u.name), serverID)
-			k.message <- msg1
-			msg2 := NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", k.name), serverID)
-			u.message <- msg2
+	usr := s.queue[0]
+	for su, u := range s.workers {
+		if u == nil {
+			s.workers[su] = usr
+			su.write(NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", usr.name), serverUUID))
+			usr.write(NewMessage(serverName, fmt.Sprintf("%s has joined the chat!", su.name), serverUUID))
 			s.queue = s.queue[1:]
 			return
 		}
 	}
 }
 
-func (s *Server) unregisterUser(u *user) {
-	defer u.socket.Close()
+func (s *Server) unregisterUser(usr *user) {
+	defer usr.socket.Close()
 	// If user disconnects while still in queue
-	for i, v := range s.queue {
-		if v == u {
+	for i, u := range s.queue {
+		if u == usr {
 			s.queue = append(s.queue[:i], s.queue[i+1:]...)
 			return
 		}
 	}
 	// If user disconnects while chatting with support user
-	for k, v := range s.workers {
-		if v == u {
-			s.workers[k] = nil
-			msg := NewMessage(serverName, fmt.Sprintf("%s has left the chat!", v.name), serverID)
-			k.message <- msg
+	for su, u := range s.workers {
+		if u == usr {
+			s.workers[su] = nil
+			su.write(NewMessage(serverName, fmt.Sprintf("%s has left the chat!", usr.name), serverUUID))
 			s.poll <- true
 			return
 		}

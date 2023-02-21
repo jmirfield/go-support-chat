@@ -206,7 +206,7 @@ func TestConnectNextUserFromQueue(t *testing.T) {
 	}
 
 	for _, v := range server.workers {
-		server.done <- v
+		server.close <- v.id
 	}
 	server.mu.Unlock()
 
