@@ -20,7 +20,7 @@ type Client struct {
 }
 
 // NewClient creates a new client with a connection to the websocket server
-func NewClient(name string, support bool, url url.URL) *Client {
+func NewClient(url url.URL, name string, support bool) *Client {
 	headers := http.Header{}
 	headers.Set("Name", name)
 	if support {

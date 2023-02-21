@@ -27,9 +27,9 @@ func main() {
 	var client *chat.Client
 	url := url.URL{Scheme: "ws", Host: "localhost:8080", Path: "/connect"}
 	if *supportFlag {
-		client = chat.NewClient(n, true, url)
+		client = chat.NewClient(url, n, true)
 	} else {
-		client = chat.NewClient(n, false, url)
+		client = chat.NewClient(url, n, false)
 	}
 
 	client.Start()
