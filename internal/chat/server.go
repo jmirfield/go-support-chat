@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -101,6 +102,12 @@ func (s *Server) newUser(conn *websocket.Conn, name string, support bool) {
 func (s *Server) write(msg Message) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// If message is blank, do nothing
+	if len(strings.TrimSpace(msg.Body)) == 0 {
+		return
+	}
+
 	for k, v := range s.workers {
 		// If support user sent the message, forward that to end user
 		if k.id == msg.ID && v != nil {
